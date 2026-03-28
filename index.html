@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="WorkClock">
+    <title>WorkClock Pro</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        :root { --bg: #050a14; --card: #0e1a2d; --accent: #38bdf8; --success: #4ade80; --danger: #f87171; --text: #e2e8f0; }
+        * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); padding-bottom: 100px; line-height: 1.6; }
+        
+        /* Glass Header */
+        .hdr { position: sticky; top: 0; background: rgba(5, 10, 20, 0.8); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); padding: 20px; border-bottom: 1px solid rgba(255,255,255,0.05); z-index: 100; }
+        .hdr-title { font-size: 22px; font-weight: 800; background: linear-gradient(to right, #fff, var(--accent)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        
+        .nav { display: flex; gap: 8px; margin-top: 15px; }
+        .nav-btn { flex: 1; padding: 10px; border-radius: 12px; border: 1px solid #1e293b; background: #0f172a; color: #64748b; font-size: 11px; font-weight: 700; transition: 0.2s; }
+        .nav-btn.active { background: var(--accent); color: #000; border: none; transform: scale(1.03); }
+        
+        .body { padding: 16px; max-width: 500px; margin: 0 auto; }
+        .card { background: var(--card); border: 1px solid rgba(255,255,255,0.08); border-radius: 20px; padding: 20px; margin-bottom: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+        .card-title { font-size: 12px; font-weight: 800; color: var(--accent); margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px; }
+
+        input, select { width: 100%; background: #070f1a; border: 1px solid #1e293b; padding: 14px; border-radius: 12px; color: white; margin-bottom: 12px; font-size: 16px; }
+        .action-btn { width: 100%; padding: 18px; border-radius: 15px; border: none; font-size: 16px; font-weight: 800; cursor: pointer; transition: 0.1s; }
+        .action-btn:active { transform: scale(0.97); }
+        .btn-in { background: var(--success); color: #052e16; }
+        .btn-out { background: var(--danger); color: white; }
+        .btn-geo { background: #6366f1; color: white; }
+
+        .erow { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .bnav { position: fixed; bottom: 0; width: 100%; background: rgba(5, 10, 20, 0.9); backdrop-filter: blur(20px); display: flex; border-top: 1px solid rgba(255,255,255,0.05); height: 85px; padding-bottom: 20px; }
+        .bb { flex: 1; background: none; border: none; color: #475569; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; }
+        .bb.active { color: var(--accent); }
+        .hidden { display: none !important; }
+        
+        /* GPS Status Pill */
+        .pill { display: inline-block; padding: 5px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; margin-bottom: 15px; background: rgba(255,255,255,0.05); }
+    </style>
+</head>
+<body>
+
+<div class="hdr">
+    <div class="hdr-title">WorkClock Pro</div>
+    <div class="nav">
+        <button class="nav-btn active" id="nb-today" onclick="sv('today')">LOG</button>
+        <button class="nav-btn" id="nb-week" onclick="sv('week')">WEEK</button>
+        <button class="nav-btn" id="nb-month" onclick="sv('month')">MONTH</button>
+        <button class="nav-btn" id="nb-setup" onclick="sv('setup')">SETUP</button>
+    </div>
+</div>
+
+<div class="body">
+    <div id="view-today">
+        <div class="card" style="text-align: center;">
+            <div id="dist-info" class="pill">Waiting for GPS...</div>
+            <div id="quick-log"></div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Manual Adjustment</div>
+            <input type="date" id="f-date">
+            <div style="display:flex; gap:10px;">
+                <input type="time" id="f-login" placeholder="In">
+                <input type="time" id="f-logout" placeholder="Out">
+            </div>
+            <div style="display:flex; gap:10px; margin-bottom: 15px;">
+                <button id="mb-b" class="nav-btn" onclick="togMeal('b')">🥐 Breakfast OFF</button>
+                <button id="mb-l" class="nav-btn" onclick="togMeal('l')">🍱 Lunch OFF</button>
+            </div>
+            <input type="text" id="f-note" placeholder="Add note...">
+            <button class="action-btn btn-geo" onclick="saveManual()">💾 Save Entry</button>
+        </div>
+    </div>
+
+    <div id="view-week" class="hidden"></div>
+
+    <div id="view-month" class="hidden">
+        <div id="month-ctrl" class="card"></div>
+        <div id="month-data"></div>
+    </div>
+
+    <div id="view-setup" class="hidden">
+        <div class="card">
+            <div class="card-title">Work Location</div>
+            <input type="text" id="inp-addr" placeholder="Work Address">
+            <button class="action-btn btn-geo" onclick="geocode()">🔍 Geocode & Save</button>
+            <button class="action-btn" style="background:#1e293b; color:white; margin-top:10px;" onclick="saveGPS()">📡 Use Current GPS</button>
+            <select id="sel-radius" style="margin-top:15px;">
+                <option value="50">50m Radius</option>
+                <option value="100" selected>100m Radius</option>
+                <option value="250">250m Radius</option>
+            </select>
+        </div>
+        <button class="action-btn btn-out" style="background:#1e1b4b;" onclick="exportXL()">📥 Export Excel</button>
+        <button class="action-btn" style="background:none; color:#475569; font-size:12px;" onclick="clearAll()">🗑️ Reset All Data</button>
+    </div>
+</div>
+
+<div class="bnav">
+    <button class="bb active" onclick="sv('today')"><span>📝</span><span>LOG</span></button>
+    <button class="bb" onclick="sv('week')"><span>📅</span><span>WEEK</span></button>
+    <button class="bb" onclick="sv('month')"><span>📊</span><span>DATA</span></button>
+    <button class="bb" onclick="sv('setup')"><span>⚙️</span><span>SETUP</span></button>
+</div>
+
+<script>
+const SK = "wc_v4_data", LK = "wc_v4_loc";
+let entries = JSON.parse(localStorage.getItem(SK)) || [];
+let workLoc = JSON.parse(localStorage.getItem(LK)) || null;
+let meals = { b: false, l: false };
+
+function haptic() { if (window.navigator.vibrate) window.navigator.vibrate(15); }
+function today() { return new Date().toISOString().split("T")[0]; }
+function nowHM() { return new Date().toTimeString().slice(0,5); }
+
+// --- GPS ENGINE ---
+function getDist(la1, lo1, la2, lo2) {
+    const R = 6371000; const dLat = (la2-la1)*Math.PI/180; const dLon = (lo2-lo1)*Math.PI/180;
+    const a = Math.sin(dLat/2)**2 + Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(dLon/2)**2;
+    return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+}
+
+function updateGPS() {
+    if(!navigator.geolocation || !workLoc) return;
+    navigator.geolocation.getCurrentPosition(pos => {
+        const d = getDist(pos.coords.latitude, pos.coords.longitude, workLoc.lat, workLoc.lng);
+        const isAtWork = d <= (workLoc.radius || 100);
+        document.getElementById('dist-info').innerHTML = isAtWork ? `<span style="color:var(--success)">● AT WORK (${d}m)</span>` : `<span style="color:var(--danger)">● AWAY (${d}m)</span>`;
+    }, null, {enableHighAccuracy:true});
+}
+setInterval(updateGPS, 5000);
+
+// --- LOGGING ENGINE ---
+function save() { localStorage.setItem(SK, JSON.stringify(entries)); renderQuickLog(); haptic(); }
+
+function doLogin() {
+    entries.push({ id: Date.now(), date: today(), loginTime: nowHM(), logoutTime: "", breakfast: meals.b, lunch: meals.l, totalHours: 0, note: document.getElementById('f-note').value });
+    save();
+}
+
+function doLogout() {
+    let e = entries.find(x => x.date === today() && !x.logoutTime);
+    if(e) { 
+        e.logoutTime = nowHM(); 
+        let [ih, im] = e.loginTime.split(":").map(Number);
+        let [oh, om] = e.logoutTime.split(":").map(Number);
+        let mins = (oh*60+om) - (ih*60+im);
+        if(e.breakfast) mins -= 30; if(e.lunch) mins -= 30;
+        e.totalHours = Math.max(0, mins/60).toFixed(2);
+        save(); 
+    }
+}
+
+function saveManual() {
+    const d = document.getElementById('f-date').value;
+    const i = document.getElementById('f-login').value;
+    const o = document.getElementById('f-logout').value;
+    if(!d || !i || !o) return alert("Fill In/Out times");
+    let [ih, im] = i.split(":").map(Number);
+    let [oh, om] = o.split(":").map(Number);
+    let mins = (oh*60+om) - (ih*60+im);
+    if(meals.b) mins -= 30; if(meals.l) mins -= 30;
+    entries.push({ id: Date.now(), date: d, loginTime: i, logoutTime: o, breakfast: meals.b, lunch: meals.l, totalHours: (mins/60).toFixed(2), note: document.getElementById('f-note').value });
+    save(); alert("Manual Entry Saved");
+}
+
+// --- SETUP & UTILS ---
+async function geocode() {
+    const a = document.getElementById('inp-addr').value;
+    if(!a) return;
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(a)}&format=json&limit=1`);
+    const data = await res.json();
+    if(data.length) {
+        workLoc = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), radius: parseInt(document.getElementById('sel-radius').value) };
+        localStorage.setItem(LK, JSON.stringify(workLoc));
+        alert("Work Location Set!"); updateGPS();
+    }
+}
+
+function saveGPS() {
+    navigator.geolocation.getCurrentPosition(pos => {
+        workLoc = { lat: pos.coords.latitude, lng: pos.coords.longitude, radius: parseInt(document.getElementById('sel-radius').value) };
+        localStorage.setItem(LK, JSON.stringify(workLoc));
+        alert("Current GPS Saved as Work!"); updateGPS();
+    });
+}
+
+function sv(v) {
+    ['today', 'week', 'month', 'setup'].forEach(id => document.getElementById('view-'+id).classList.toggle('hidden', id !== v));
+    document.querySelectorAll('.nav-btn, .bb').forEach(b => b.classList.remove('active'));
+    document.getElementById('nb-'+v).classList.add('active');
+    if(v==='week') renderWeek();
+    if(v==='month') renderMonth();
+}
+
+function togMeal(m) {
+    meals[m] = !meals[m];
+    document.getElementById('mb-'+m).classList.toggle('on', meals[m]);
+    document.getElementById('mb-'+m).textContent = (m==='b'?'🥐 Breakfast ':'🍱 Lunch ') + (meals[m]?'ON':'OFF');
+}
+
+function renderQuickLog() {
+    const box = document.getElementById('quick-log');
+    const active = entries.find(e => e.date === today() && !e.logoutTime);
+    box.innerHTML = active ? `<button class="action-btn btn-out" onclick="doLogout()">🔴 LOG LOGOUT</button><div style="margin-top:10px; font-size:12px; opacity:0.6;">Shift started at ${active.loginTime}</div>` 
+                           : `<button class="action-btn btn-in" onclick="doLogin()">🟢 LOG LOGIN</button>`;
+}
+
+function renderWeek() {
+    const view = document.getElementById('view-week');
+    if(!entries.length) { view.innerHTML = '<div class="card">No data yet.</div>'; return; }
+    let sorted = [...entries].sort((a,b) => b.date.localeCompare(a.date));
+    view.innerHTML = `<div class="card-title">Recent Entries</div>` + sorted.slice(0,10).map(e => `
+        <div class="card"><div class="erow"><span><b>${e.date}</b></span><span>${e.loginTime} - ${e.logoutTime || '...'}</span><span style="color:var(--accent)">${e.totalHours}h</span></div></div>
+    `).join("");
+}
+
+function renderMonth() {
+    const ctrl = document.getElementById('month-ctrl');
+    let months = [...new Set(entries.map(e => e.date.slice(0,7)))].sort().reverse();
+    ctrl.innerHTML = `<div class="card-title">Select Month</div><select onchange="renderMonthData(this.value)">` + months.map(m => `<option value="${m}">${m}</option>`).join("") + `</select>`;
+    if(months.length) renderMonthData(months[0]);
+}
+
+function renderMonthData(m) {
+    const data = document.getElementById('month-data');
+    let me = entries.filter(e => e.date.startsWith(m));
+    let tot = me.reduce((a, b) => a + parseFloat(b.totalHours || 0), 0);
+    data.innerHTML = `<div class="card" style="text-align:center;"><div class="card-title">Monthly Total</div><div style="font-size:36px; font-weight:800;">${tot.toFixed(2)} hrs</div><div style="font-size:12px; opacity:0.5; margin-top:5px;">${me.length} days worked</div></div>`;
+}
+
+function exportXL() {
+    const ws = XLSX.utils.json_to_sheet(entries);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "WorkLogs");
+    XLSX.writeFile(wb, "WorkLog_Export.xlsx");
+}
+
+function clearAll() { if(confirm("Delete all data?")) { localStorage.clear(); location.reload(); } }
+
+document.getElementById('f-date').value = today();
+renderQuickLog();
+updateGPS();
+</script>
+</body>
+</html>
